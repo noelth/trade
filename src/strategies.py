@@ -3,21 +3,21 @@ import backtrader as bt
 
 class SmaCross(bt.Strategy):
     params = dict(
-        pfast=10,  # period for the fast moving average
-        pslow=30   # period for the slow moving average
+        pfast=21,  # fast SMA period
+        pslow=55   # slow SMA period
     )
 
     def __init__(self):
-        sma1 = bt.indicators.SMA(self.data.close, period=self.p.pfast)
-        sma2 = bt.indicators.SMA(self.data.close, period=self.p.pslow)
-        self.crossover = bt.indicators.CrossOver(sma1, sma2)
+        sma_fast = bt.indicators.SMA(self.data.close, period=self.p.pfast)
+        sma_slow = bt.indicators.SMA(self.data.close, period=self.p.pslow)
+        self.crossover = bt.indicators.CrossOver(sma_fast, sma_slow)
 
     def next(self):
-        if not self.position:  # not in the market
-            if self.crossover > 0:  # fast SMA crosses above slow SMA
-                self.buy()  # enter long
-        elif self.crossover < 0:  # in the market and crossover turns negative
-            self.close()  # exit position
+        if not self.position:
+            if self.crossover > 0:
+                self.buy()  # enter long on bullish crossover
+        elif self.crossover < 0:
+            self.close()  # exit when crossover turns negative
 
     def notify_order(self, order):
         if order.status in [order.Completed]:

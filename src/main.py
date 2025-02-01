@@ -26,16 +26,15 @@ from strategies import SmaCross
 # Map strategy names to classes for easy selection
 STRATEGIES = {
     'sma': SmaCross,
-    # You can add additional strategies here
+    # You can add additional strategies here.
 }
 
 def fetch_historical_data(ticker, start, end, timeframe, api):
     """
-    Fetch historical data for a given ticker from Alpaca and return a Pandas DataFrame.
-    This function handles both MultiIndex (when multiple tickers are returned) and simple DatetimeIndex.
+    Fetch historical data for a given ticker from Alpaca and return a DataFrame.
+    Handles both MultiIndex (if multiple tickers are returned) and simple DatetimeIndex.
     """
     try:
-        # Request bars with adjustments for splits/dividends
         bars = api.get_bars(ticker, timeframe, start.isoformat(), end.isoformat(), adjustment='all').df
         if isinstance(bars.index, pd.MultiIndex):
             if ticker in bars.index.levels[0]:
@@ -52,11 +51,13 @@ def fetch_historical_data(ticker, start, end, timeframe, api):
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()
 
+
 def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee):
-    # Initialize Alpaca API connection (v2)
+    # Initialize Alpaca API connection
     api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
 
-    # Map granularity to Alpaca's timeframe and determine compression if needed
+
+    # Map granularity to Alpaca's timeframe and set compression if needed.
     tf_mapping = {
         'day': tradeapi.TimeFrame.Day,
         'hour': tradeapi.TimeFrame.Hour,
@@ -70,6 +71,7 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
     elif granularity.lower() == '30min':
         compression = 30
 
+    # Convert backtest start/end dates (assumed to be in YYYY-MM-DD format) to datetime in UTC.
     tz = pytz.utc
     start_date = tz.localize(datetime.strptime(backtest_start, '%Y-%m-%d'))
     end_date   = tz.localize(datetime.strptime(backtest_end, '%Y-%m-%d'))
@@ -80,7 +82,7 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
         print(f"No data available for {ticker}. Exiting backtest.")
         return
 
-    # Define a custom PandasData feed to support compression (for minute data)
+    # Create a custom PandasData feed to support minute data compression.
     class CustomPandasData(bt.feeds.PandasData):
         params = (
             ('compression', compression),
@@ -95,7 +97,7 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
     data = CustomPandasData(dataname=df)
 
-    # Set up Cerebro engine
+    # Set up the Cerebro engine.
     cerebro = bt.Cerebro()
     cerebro.adddata(data, name=ticker)
     cerebro.addstrategy(strategy_class)
@@ -103,17 +105,19 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
     cerebro.broker.setcommission(commission=fee)
 
     print(f"Starting Portfolio Value: ${cerebro.broker.getvalue():.2f}")
-    results = cerebro.run()
+    cerebro.run()
     final_value = cerebro.broker.getvalue()
     dollar_change = final_value - principal
-    pct_change = (dollar_change / principal) * 100
+    pct_change = (dollar_change / principal) * 100  
 
     print(f"Final Portfolio Value: ${final_value:.2f}")
     print(f"Dollar Change: ${dollar_change:.2f}")
     print(f"Percentage Change: {pct_change:.2f}%")
 
-    # Plot the result with candlestick style; buy/sell markers are added automatically
-    cerebro.plot(style='candlestick')
+    # Plot the results using candlestick style with monochrome candles.
+    # We override the default colors by specifying the same color for both bullish and bearish candles.
+    figs = cerebro.plot(style='candlestick', barup='green', bardown='green')
+    plt.show()
 
 def main():
     parser = argparse.ArgumentParser(description="Backtest a trading strategy using Alpaca data and Backtrader.")
