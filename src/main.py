@@ -22,6 +22,7 @@ BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 if not API_KEY or not API_SECRET:
     raise Exception("API credentials not set. Please check your .env file for APCA_API_KEY_ID and APCA_API_SECRET_KEY.")
 
+
 # Map strategy names to classes for easy selection
 STRATEGIES = {
     'sma': strat.SmaCross,
@@ -51,7 +52,11 @@ def fetch_historical_data(ticker, start, end, timeframe, api):
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()
 
+<<<<<<< HEAD
 def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee, take_profit, stop_loss, atr_period, atr_multiplier, trailing_stop):
+=======
+def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee):
+>>>>>>> parent of aefb584 (added stop loss and profit)
     # Initialize Alpaca API connection
     api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
 
@@ -96,6 +101,7 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
     cerebro = bt.Cerebro()
     cerebro.adddata(data, name=ticker)
+<<<<<<< HEAD
     # Pass all strategy parameters
     cerebro.addstrategy(strategy_class,
                        take_profit=take_profit,
@@ -103,6 +109,9 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
                        trailing_stop=trailing_stop,
                        atr_period=atr_period,
                        atr_multiplier=atr_multiplier)
+=======
+    cerebro.addstrategy(strategy_class)
+>>>>>>> parent of aefb584 (added stop loss and profit)
     cerebro.broker.setcash(principal)
     cerebro.broker.setcommission(commission=fee)
 
@@ -120,11 +129,12 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
 def main():
     parser = argparse.ArgumentParser(description="Backtest a trading strategy using Alpaca data and Backtrader.")
-    parser.add_argument("--strategy", type=str, default="bbbreak", help="Strategy to use (e.g., 'sma', 'rsimacd', 'bbbreak')")
+    parser.add_argument("--strategy", type=str, default="sma", help="Strategy to use (e.g., 'sma' or 'rsimacd')")
     parser.add_argument("--ticker", type=str, required=True, help="Ticker symbol for backtesting")
     parser.add_argument("--start", type=str, required=True, help="Backtest start date in YYYY-MM-DD format")
     parser.add_argument("--end", type=str, required=True, help="Backtest end date in YYYY-MM-DD format")
     parser.add_argument("--granularity", type=str, default="day", help="Data granularity (day, hour, 5min, 30min)")
+<<<<<<< HEAD
     parser.add_argument("--principal", type=float, default=1000.0, help="Starting principal amount")
     parser.add_argument("--fee", type=float, default=0.003, help="Trading fee as a fraction (e.g., 0.003 for 0.3%)")
     parser.add_argument("--take_profit", type=float, default=0.50, help="Take profit margin as a fraction (e.g., 0.05 for 5%)")
@@ -132,6 +142,10 @@ def main():
     parser.add_argument("--trailing_stop", type=float, default=0.03, help="Trailing stop loss margin as a fraction (e.g., 0.03 for 3%)")
     parser.add_argument("--atr_period", type=int, default=14, help="ATR period for volatility based exit")
     parser.add_argument("--atr_multiplier", type=float, default=2.0, help="ATR multiplier for profit taking exit")
+=======
+    parser.add_argument("--principal", type=float, default=100000.0, help="Starting principal amount")
+    parser.add_argument("--fee", type=float, default=0.001, help="Trading fee as a fraction (e.g., 0.001 for 0.1%)")
+>>>>>>> parent of aefb584 (added stop loss and profit)
     args = parser.parse_args()
 
     strategy_class = STRATEGIES.get(args.strategy.lower())
@@ -139,6 +153,7 @@ def main():
         print(f"Strategy '{args.strategy}' not found. Available strategies: {list(STRATEGIES.keys())}")
         return
 
+<<<<<<< HEAD
     run_backtest(
         strategy_class,
         args.ticker,
@@ -154,5 +169,9 @@ def main():
         args.atr_multiplier   # Finally the ATR multiplier
     )
     
+=======
+    run_backtest(strategy_class, args.ticker, args.start, args.end, args.granularity, args.principal, args.fee)
+
+>>>>>>> parent of aefb584 (added stop loss and profit)
 if __name__ == "__main__":
     main()
