@@ -51,7 +51,7 @@ def fetch_historical_data(ticker, start, end, timeframe, api):
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()
 
-def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee, take_profit, stop_loss):
+def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee, take_profit, stop_loss, atr_period, atr_multiplier, trailing_stop):
     # Initialize Alpaca API connection
     api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
 
@@ -96,8 +96,13 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
     cerebro = bt.Cerebro()
     cerebro.adddata(data, name=ticker)
-    # Pass both take_profit and stop_loss parameters to the strategy
-    cerebro.addstrategy(strategy_class, take_profit=take_profit, stop_loss=stop_loss)
+    # Pass all strategy parameters
+    cerebro.addstrategy(strategy_class,
+                       take_profit=take_profit,
+                       stop_loss=stop_loss,
+                       trailing_stop=trailing_stop,
+                       atr_period=atr_period,
+                       atr_multiplier=atr_multiplier)
     cerebro.broker.setcash(principal)
     cerebro.broker.setcommission(commission=fee)
 
@@ -124,6 +129,9 @@ def main():
     parser.add_argument("--fee", type=float, default=0.003, help="Trading fee as a fraction (e.g., 0.003 for 0.3%)")
     parser.add_argument("--take_profit", type=float, default=0.50, help="Take profit margin as a fraction (e.g., 0.05 for 5%)")
     parser.add_argument("--stop_loss", type=float, default=0.05, help="Stop loss margin as a fraction (e.g., 0.05 for 5%)")
+    parser.add_argument("--trailing_stop", type=float, default=0.03, help="Trailing stop loss margin as a fraction (e.g., 0.03 for 3%)")
+    parser.add_argument("--atr_period", type=int, default=14, help="ATR period for volatility based exit")
+    parser.add_argument("--atr_multiplier", type=float, default=2.0, help="ATR multiplier for profit taking exit")
     args = parser.parse_args()
 
     strategy_class = STRATEGIES.get(args.strategy.lower())
@@ -131,7 +139,20 @@ def main():
         print(f"Strategy '{args.strategy}' not found. Available strategies: {list(STRATEGIES.keys())}")
         return
 
-    run_backtest(strategy_class, args.ticker, args.start, args.end, args.granularity, args.principal, args.fee, args.take_profit, args.stop_loss)
-
+    run_backtest(
+        strategy_class,
+        args.ticker,
+        args.start,
+        args.end,
+        args.granularity,
+        args.principal,
+        args.fee,
+        args.take_profit,
+        args.stop_loss,
+        args.trailing_stop,   # This should come after stop_loss
+        args.atr_period,      # Then the ATR period
+        args.atr_multiplier   # Finally the ATR multiplier
+    )
+    
 if __name__ == "__main__":
     main()
