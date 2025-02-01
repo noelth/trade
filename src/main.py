@@ -1,4 +1,4 @@
-# main.py
+# src/main.py
 import os
 from datetime import datetime, timedelta
 import pytz
@@ -20,19 +20,19 @@ BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 if not API_KEY or not API_SECRET:
     raise Exception("API credentials not set. Please check your .env file for APCA_API_KEY_ID and APCA_API_SECRET_KEY.")
 
-# Import strategy classes from strategies.py
-from strategies import SmaCross
+# Import strategy classes
+from strategies import SmaCross, RsiMacdStrategy
 
 # Map strategy names to classes for easy selection
 STRATEGIES = {
     'sma': SmaCross,
-    # You can add additional strategies here.
+    'rsimacd': RsiMacdStrategy
 }
 
 def fetch_historical_data(ticker, start, end, timeframe, api):
     """
     Fetch historical data for a given ticker from Alpaca and return a DataFrame.
-    Handles both MultiIndex (if multiple tickers are returned) and simple DatetimeIndex.
+    Handles both MultiIndex and simple DatetimeIndex.
     """
     try:
         bars = api.get_bars(ticker, timeframe, start.isoformat(), end.isoformat(), adjustment='all').df
@@ -51,11 +51,9 @@ def fetch_historical_data(ticker, start, end, timeframe, api):
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()
 
-
 def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee):
     # Initialize Alpaca API connection
     api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
-
 
     # Map granularity to Alpaca's timeframe and set compression if needed.
     tf_mapping = {
@@ -71,7 +69,6 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
     elif granularity.lower() == '30min':
         compression = 30
 
-    # Convert backtest start/end dates (assumed to be in YYYY-MM-DD format) to datetime in UTC.
     tz = pytz.utc
     start_date = tz.localize(datetime.strptime(backtest_start, '%Y-%m-%d'))
     end_date   = tz.localize(datetime.strptime(backtest_end, '%Y-%m-%d'))
@@ -82,7 +79,7 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
         print(f"No data available for {ticker}. Exiting backtest.")
         return
 
-    # Create a custom PandasData feed to support minute data compression.
+    # Create a custom PandasData feed to support minute-based compression.
     class CustomPandasData(bt.feeds.PandasData):
         params = (
             ('compression', compression),
@@ -97,7 +94,6 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
     data = CustomPandasData(dataname=df)
 
-    # Set up the Cerebro engine.
     cerebro = bt.Cerebro()
     cerebro.adddata(data, name=ticker)
     cerebro.addstrategy(strategy_class)
@@ -108,20 +104,17 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
     cerebro.run()
     final_value = cerebro.broker.getvalue()
     dollar_change = final_value - principal
-    pct_change = (dollar_change / principal) * 100  
+    pct_change = (dollar_change / principal) * 100
 
     print(f"Final Portfolio Value: ${final_value:.2f}")
     print(f"Dollar Change: ${dollar_change:.2f}")
     print(f"Percentage Change: {pct_change:.2f}%")
 
-    # Plot the results using candlestick style with monochrome candles.
-    # We override the default colors by specifying the same color for both bullish and bearish candles.
-    figs = cerebro.plot(style='candlestick', barup='green', bardown='green')
-    plt.show()
+    cerebro.plot(style='candlestick')
 
 def main():
     parser = argparse.ArgumentParser(description="Backtest a trading strategy using Alpaca data and Backtrader.")
-    parser.add_argument("--strategy", type=str, default="sma", help="Strategy to use (e.g., 'sma')")
+    parser.add_argument("--strategy", type=str, default="sma", help="Strategy to use (e.g., 'sma' or 'rsimacd')")
     parser.add_argument("--ticker", type=str, required=True, help="Ticker symbol for backtesting")
     parser.add_argument("--start", type=str, required=True, help="Backtest start date in YYYY-MM-DD format")
     parser.add_argument("--end", type=str, required=True, help="Backtest end date in YYYY-MM-DD format")
