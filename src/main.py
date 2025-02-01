@@ -8,6 +8,8 @@ import backtrader as bt
 import matplotlib.pyplot as plt
 import argparse
 from dotenv import load_dotenv
+# Import strategy classes
+import strategies as strat
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,13 +22,12 @@ BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 if not API_KEY or not API_SECRET:
     raise Exception("API credentials not set. Please check your .env file for APCA_API_KEY_ID and APCA_API_SECRET_KEY.")
 
-# Import strategy classes
-from strategies import SmaCross, RsiMacdStrategy
 
 # Map strategy names to classes for easy selection
 STRATEGIES = {
-    'sma': SmaCross,
-    'rsimacd': RsiMacdStrategy
+    'sma': strat.SmaCross,
+    'rsimacd': strat.RsiMacdStrategy,
+    'bbbreak': strat.BollingerBreakoutStrategy
 }
 
 def fetch_historical_data(ticker, start, end, timeframe, api):
