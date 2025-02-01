@@ -22,7 +22,6 @@ BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 if not API_KEY or not API_SECRET:
     raise Exception("API credentials not set. Please check your .env file for APCA_API_KEY_ID and APCA_API_SECRET_KEY.")
 
-
 # Map strategy names to classes for easy selection
 STRATEGIES = {
     'sma': strat.SmaCross,
@@ -52,7 +51,7 @@ def fetch_historical_data(ticker, start, end, timeframe, api):
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()
 
-def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee):
+def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee, take_profit, stop_loss):
     # Initialize Alpaca API connection
     api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
 
@@ -97,7 +96,8 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
     cerebro = bt.Cerebro()
     cerebro.adddata(data, name=ticker)
-    cerebro.addstrategy(strategy_class)
+    # Pass both take_profit and stop_loss parameters to the strategy
+    cerebro.addstrategy(strategy_class, take_profit=take_profit, stop_loss=stop_loss)
     cerebro.broker.setcash(principal)
     cerebro.broker.setcommission(commission=fee)
 
@@ -115,13 +115,15 @@ def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granulari
 
 def main():
     parser = argparse.ArgumentParser(description="Backtest a trading strategy using Alpaca data and Backtrader.")
-    parser.add_argument("--strategy", type=str, default="sma", help="Strategy to use (e.g., 'sma' or 'rsimacd')")
+    parser.add_argument("--strategy", type=str, default="bbbreak", help="Strategy to use (e.g., 'sma', 'rsimacd', 'bbbreak')")
     parser.add_argument("--ticker", type=str, required=True, help="Ticker symbol for backtesting")
     parser.add_argument("--start", type=str, required=True, help="Backtest start date in YYYY-MM-DD format")
     parser.add_argument("--end", type=str, required=True, help="Backtest end date in YYYY-MM-DD format")
     parser.add_argument("--granularity", type=str, default="day", help="Data granularity (day, hour, 5min, 30min)")
-    parser.add_argument("--principal", type=float, default=100000.0, help="Starting principal amount")
-    parser.add_argument("--fee", type=float, default=0.001, help="Trading fee as a fraction (e.g., 0.001 for 0.1%)")
+    parser.add_argument("--principal", type=float, default=1000.0, help="Starting principal amount")
+    parser.add_argument("--fee", type=float, default=0.003, help="Trading fee as a fraction (e.g., 0.003 for 0.3%)")
+    parser.add_argument("--take_profit", type=float, default=0.50, help="Take profit margin as a fraction (e.g., 0.05 for 5%)")
+    parser.add_argument("--stop_loss", type=float, default=0.05, help="Stop loss margin as a fraction (e.g., 0.05 for 5%)")
     args = parser.parse_args()
 
     strategy_class = STRATEGIES.get(args.strategy.lower())
@@ -129,7 +131,7 @@ def main():
         print(f"Strategy '{args.strategy}' not found. Available strategies: {list(STRATEGIES.keys())}")
         return
 
-    run_backtest(strategy_class, args.ticker, args.start, args.end, args.granularity, args.principal, args.fee)
+    run_backtest(strategy_class, args.ticker, args.start, args.end, args.granularity, args.principal, args.fee, args.take_profit, args.stop_loss)
 
 if __name__ == "__main__":
     main()
