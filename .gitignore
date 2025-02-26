@@ -1,11 +1,53 @@
+# System files
+.DS_Store
+**/.DS_Store
+*.pyc
+__pycache__/
+**/__pycache__/
+
+# Environment and secrets
+.env
+**/.env
+.env.local
+**/.env.local
+.env.development
+.env.production
+
+# Assets and data files
 /assets
-/app1/tradapp/node_modules
 /app1/assets
-/app1/src/.env
-/app1/src/__pycache__
-/app1/src/archive
 /app2/assets
-/app2/src/__pycache__
-/app2/src/archive
 /app2/src/results
-/app2/trade-strategy-dashboard
+
+# Node.js
+node_modules/
+**/node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+/app1/src/archive
+/app2/src/archive
+
+# Build files
+*.so
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Editor directories
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Don't ignore the dashboard code but ignore its node modules
+!/app2/trade-strategy-dashboard
+/app2/trade-strategy-dashboard/node_modules
