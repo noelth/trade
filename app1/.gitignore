@@ -2,3 +2,4 @@
 /src/.env
 /src/__pycache__
 /src/archive
+/tradapp/node_modules

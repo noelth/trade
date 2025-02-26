@@ -1,0 +1,11 @@
+/assets
+/app1/tradapp/node_modules
+/app1/assets
+/app1/src/.env
+/app1/src/__pycache__
+/app1/src/archive
+/app2/assets
+/app2/src/__pycache__
+/app2/src/archive
+/app2/src/results
+/app2/trade-strategy-dashboard
