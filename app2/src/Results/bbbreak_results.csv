@@ -1,0 +1,4 @@
+Strategy,Number of Trades,Number of Profitable Trades,Percent Change,Underlying Stock Growth,Final Portfolio Value,period,devfactor,stop_loss,take_profit,ticker,start_date,end_date,timeframe,commission,principal,num_trades,num_profitable_trades
+bbbreak,0,0,17.191914441573353,76.62266226622663,11719.191444157335,20,2.0,0.05,0.1,AAPL,2020-01-01,2023-01-01,1D,0.0003,10000.0,0,0
+bbbreak,0,0,24.26455934015579,144.43328310731624,12426.45593401558,20,2.0,0.05,0.1,NVDA,2020-01-01,2023-01-01,1D,0.0003,10000.0,0,0
+bbbreak,0,0,60.6613983503895,144.43328310731624,16066.13983503895,20,2.0,0.05,0.1,NVDA,2020-01-01,2023-01-01,1D,0.0003,10000.0,0,0

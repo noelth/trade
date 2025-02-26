@@ -1,0 +1,232 @@
+# src/main.py
+import os
+from datetime import datetime, timedelta
+import pytz
+import alpaca_trade_api as tradeapi
+import pandas as pd
+import backtrader as bt
+import matplotlib.pyplot as plt
+import argparse
+from dotenv import load_dotenv
+# Import strategy classes
+from strategy import SmaCross, BollingerBreakoutStrategy, RsiMacdStrategy, TestStrat1, HighVolPivotsStrategy
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Retrieve Alpaca API credentials
+API_KEY = os.getenv("APCA_API_KEY_ID")
+API_SECRET = os.getenv("APCA_API_SECRET_KEY")
+BASE_URL = os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
+
+if not API_KEY or not API_SECRET:
+    raise Exception("API credentials not set. Please check your .env file for APCA_API_KEY_ID and APCA_API_SECRET_KEY.")
+
+# Map strategy names to classes for easy selection
+STRATEGIES = {
+    'sma': SmaCross,
+    'bbbreak': BollingerBreakoutStrategy,
+    'rsimacd': RsiMacdStrategy,
+    'teststrat1': TestStrat1,
+    'volpivots': HighVolPivotsStrategy
+}
+
+def fetch_historical_data(ticker, start, end, timeframe, api):
+    """
+    Fetch historical data for a given ticker from Alpaca and return a DataFrame.
+    Handles both MultiIndex and simple DatetimeIndex.
+    """
+    try:
+        bars = api.get_bars(ticker, timeframe, start.isoformat(), end.isoformat(), adjustment='all').df
+        if isinstance(bars.index, pd.MultiIndex):
+            if ticker in bars.index.levels[0]:
+                df = bars.xs(ticker, level=0)
+            else:
+                print(f"No data returned for {ticker} in multi-index format.")
+                return pd.DataFrame()
+        else:
+            df = bars
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
+        return df
+    except Exception as e:
+        print(f"Error fetching data for {ticker}: {e}")
+        return pd.DataFrame()
+
+def run_backtest(strategy_class, ticker, backtest_start, backtest_end, granularity, principal, fee, take_profit, left_bars, right_bars, filter_vol, lookback, percentile_rank, show_levels, step):
+    # Initialize Alpaca API connection
+    api = tradeapi.REST(API_KEY, API_SECRET, BASE_URL, api_version='v2')
+
+    # Map granularity to Alpaca's timeframe and set compression if needed
+    tf_mapping = {
+        'day': tradeapi.TimeFrame.Day,
+        'hour': tradeapi.TimeFrame.Hour,
+        '5min': tradeapi.TimeFrame.Minute,
+        '30min': tradeapi.TimeFrame.Minute,
+    }
+    timeframe = tf_mapping.get(granularity.lower(), tradeapi.TimeFrame.Day)
+    compression = 1
+    if granularity.lower() == '5min':
+        compression = 5
+    elif granularity.lower() == '30min':
+        compression = 30
+
+    tz = pytz.utc
+    start_date = tz.localize(datetime.strptime(backtest_start, '%Y-%m-%d'))
+    end_date   = tz.localize(datetime.strptime(backtest_end, '%Y-%m-%d'))
+
+    print(f"Fetching historical data for {ticker} from {start_date.date()} to {end_date.date()}...")
+    df = fetch_historical_data(ticker, start_date, end_date, timeframe, api)
+    if df.empty:
+        print(f"No data available for {ticker}. Exiting backtest.")
+        return
+
+    # Create a custom PandasData feed to support minute-based compression.
+    class CustomPandasData(bt.feeds.PandasData):
+        params = (
+            ('compression', compression),
+            ('datetime', None),
+            ('open', 'open'),
+            ('high', 'high'),
+            ('low', 'low'),
+            ('close', 'close'),
+            ('volume', 'volume'),
+            ('openinterest', -1),
+        )
+
+    data = CustomPandasData(dataname=df)
+
+    cerebro = bt.Cerebro()
+    cerebro.adddata(data, name=ticker)
+    # Pass the take_profit parameter to the strategy
+    cerebro.addstrategy(strategy_class, take_profit=take_profit)
+    cerebro.broker.setcash(principal)
+    cerebro.broker.setcommission(commission=fee)
+
+    print(f"Starting Portfolio Value: ${cerebro.broker.getvalue():.2f}")
+    cerebro.run()
+    final_value = cerebro.broker.getvalue()
+    dollar_change = final_value - principal
+    pct_change = (dollar_change / principal) * 100
+
+    print(f"Final Portfolio Value: ${final_value:.2f}")
+    print(f"Dollar Change: ${dollar_change:.2f}")
+    print(f"Percentage Change: {pct_change:.2f}%")
+
+    cerebro.plot(style='candlestick')
+
+def main():
+    parser = argparse.ArgumentParser(description="Backtest a trading strategy using Alpaca data and Backtrader.")
+    parser.add_argument('--strategy', type=str, choices=list(STRATEGIES.keys()), default='volpoints', help='Strategy to run (choose from: ' + ', '.join(STRATEGIES.keys()) + ')')   
+    parser.add_argument("--start", type=str, required=True, help="Backtest start date in YYYY-MM-DD format")
+    parser.add_argument("--end", type=str, required=True, help="Backtest end date in YYYY-MM-DD format")
+    parser.add_argument("--granularity", type=str, default="day", help="Data granularity (day, hour, 5min, 30min)")
+    parser.add_argument("--principal", type=float, default=1000.0, help="Starting principal amount")
+    parser.add_argument("--fee", type=float, default=0.003, help="Trading fee as a fraction (e.g., 0.003 for 0.3%)")
+    parser.add_argument("--take_profit", type=float, default=0.0, help="Take profit margin as a fraction (e.g., 0.05 for 5%)")
+    
+    parser.add_argument('--left-bars', type=int, default=15, help='Number of bars to the left of pivot detection (default: 15)')
+    parser.add_argument('--right-bars', type=int, default=1, help='Number of bars to the right of pivot detection (default: 1)')
+    parser.add_argument('--filter-vol', type=float, default=5.6, help='Volume threshold for pivot (default: 5.6 on 0-6 scale)')
+    parser.add_argument('--lookback', type=int, default=300, help='Lookback for rolling volume percentile (default: 300)')
+    parser.add_argument('--percentile-rank', type=float, default=95.0, help='Volume percentile rank threshold (default: 95)')
+    parser.add_argument('--show-levels', action='store_true', help='Toggle to show pivot levels in code logic (default: off)')
+    parser.add_argument('--step', type=float, default=0.6, help='Diameter step for pivot circles (not used in standard Backtrader plotting)')
+
+    # Parameters for SmaCross
+    parser.add_argument('--sma-fast', type=int, default=50, help='Fast SMA period for SmaCross strategy (default: 50)')
+    parser.add_argument('--sma-slow', type=int, default=200, help='Slow SMA period for SmaCross strategy (default: 200)')
+    parser.add_argument('--sma-take-profit', type=float, default=0.0, help='Take profit percentage for SmaCross strategy (default: 0.0)')
+
+    # Parameters for BollingerBreakoutStrategy
+    parser.add_argument('--bb-period', type=int, default=20, help='Bollinger Bands period for BollingerBreakoutStrategy (default: 20)')
+    parser.add_argument('--bb-devfactor', type=float, default=2.0, help='Bollinger Bands deviation factor for BollingerBreakoutStrategy (default: 2.0)')
+    parser.add_argument('--bb-stop-loss', type=float, default=0.0, help='Stop loss percentage for BollingerBreakoutStrategy (default: 0.0)')
+    parser.add_argument('--bb-take-profit', type=float, default=0.0, help='Take profit percentage for BollingerBreakoutStrategy (default: 0.0)')
+
+    # Parameters for RsiMacdStrategy
+    parser.add_argument('--rsi-period', type=int, default=14, help='RSI period for RsiMacdStrategy (default: 14)')
+    parser.add_argument('--rsi-oversold', type=int, default=30, help='RSI oversold threshold for RsiMacdStrategy (default: 30)')
+    parser.add_argument('--rsi-overbought', type=int, default=70, help='RSI overbought threshold for RsiMacdStrategy (default: 70)')
+    parser.add_argument('--macd-fast', type=int, default=12, help='MACD fast EMA period for RsiMacdStrategy (default: 12)')
+    parser.add_argument('--macd-slow', type=int, default=26, help='MACD slow EMA period for RsiMacdStrategy (default: 26)')
+    parser.add_argument('--macd-signal', type=int, default=9, help='MACD signal period for RsiMacdStrategy (default: 9)')
+    parser.add_argument('--rsi-stop-loss', type=float, default=0.05, help='Stop loss percentage for RsiMacdStrategy (default: 0.05)')
+    parser.add_argument('--rsi-take-profit', type=float, default=0.0, help='Take profit percentage for RsiMacdStrategy (default: 0.0)')
+
+    # Parameters for HighVolPivotsStrategy
+    parser.add_argument('--pivot-left-bars', type=int, default=15, help='Number of bars to the left for pivot detection (default: 15)')
+    parser.add_argument('--pivot-right-bars', type=int, default=1, help='Number of bars to the right for pivot detection (default: 1)')
+    parser.add_argument('--pivot-filter-vol', type=float, default=5.6, help='Normalized volume threshold for pivot detection (default: 5.6)')
+    parser.add_argument('--pivot-lookback', type=int, default=300, help='Number of bars for rolling volume percentile calculation (default: 300)')
+    parser.add_argument('--pivot-percentile-rank', type=float, default=95.0, help='Percentile used for "high volume" detection (default: 95.0)')
+    parser.add_argument('--pivot-show-levels', type=bool, default=True, help='Whether to add PivotLine indicators for detected pivots (default: True)')
+    parser.add_argument('--pivot-step', type=float, default=0.6, help='Parameter for adjusting marker sizes (default: 0.6)')
+
+    args = parser.parse_args()
+
+    strategy_class = STRATEGIES.get(args.strategy.lower())
+    if strategy_class is None:
+        print(f"Strategy '{args.strategy}' not found. Available strategies: {list(STRATEGIES.keys())}")
+        return
+
+    run_backtest(strategy_class, args.ticker, args.start, args.end, args.granularity, args.principal, args.fee, args.take_profit, args.left_bars, args.right_bars, args.filter_vol, args.lookback, args.percentile_rank, args.show_levels, args.step)
+
+    # Select strategy based on CLI argument.
+    if args.strategy == 'sma':
+        cerebro.addstrategy(
+            SmaCross,
+            pfast=args.sma_fast,
+            pslow=args.sma_slow,
+            take_profit=args.sma_take_profit
+        )
+    elif args.strategy == 'bbbreak':
+        cerebro.addstrategy(
+            BollingerBreakoutStrategy,
+            period=args.bb_period,
+            devfactor=args.bb_devfactor,
+            stop_loss=args.bb_stop_loss,
+            take_profit=args.bb_take_profit
+        )
+    elif args.strategy == 'rsimacd':
+        cerebro.addstrategy(
+            RsiMacdStrategy,
+            rsi_period=args.rsi_period,
+            rsi_oversold=args.rsi_oversold,
+            rsi_overbought=args.rsi_overbought,
+            macd_fast=args.macd_fast,
+            macd_slow=args.macd_slow,
+            macd_signal=args.macd_signal,
+            stop_loss=args.rsi_stop_loss,
+            take_profit=args.rsi_take_profit
+        )
+    elif args.strategy == 'teststrat1':
+        cerebro.addstrategy(
+            TestStrat1,
+            bb_period=args.bb_period,
+            bb_dev=args.bb_dev,
+            sma_short_period=args.sma_short_period,
+            sma_long_period=args.sma_long_period,
+            atr_period=args.ts1_atr_period,
+            atr_multiplier=args.ts1_atr_multiplier,
+            basic_stop_pct=args.basic_stop_pct
+        )
+    elif args.strategy == 'volpivots':
+        cerebro.addstrategy(
+            HighVolPivotsStrategy,
+            left_bars=args.pivot_left_bars,
+            right_bars=args.pivot_right_bars,
+            filter_vol=args.pivot_filter_vol,
+            lookback=args.pivot_lookback,
+            percentile_rank=args.pivot_percentile_rank,
+            show_levels=args.pivot_show_levels,
+            step=args.pivot_step
+        )
+    else:
+        print("Unknown strategy specified.")
+        return
+
+    # ... (existing code) ...
+
+if __name__ == "__main__":
+    main()
